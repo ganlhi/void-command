@@ -83,5 +83,25 @@ namespace VoidCommand.Shared
             }
         }
         
+        /// <summary>Returns the angle in degrees from 0 to 180 between two float3s.</summary>
+        public static float Angle(float3 from, float3 to)
+        {
+            return math.degrees(math.acos(math.dot(math.normalize(from), math.normalize(to))));
+        }
+        
+        /// <summary>Returns the signed angle in degrees from 180 to -180 between two float3s.</summary>
+        public static float AngleSigned(float3 from, float3 to)
+        {
+            var angle = math.acos(math.dot(math.normalize(from), math.normalize(to)));
+            var cross = math.cross(from, to);
+            angle *= math.sign(math.dot(math.up(), cross));
+            return math.degrees(angle);
+        }
+
+        public static float GeesToMs2(float gees)
+        {
+            return 9.80665f * gees;
+        }
+        
     }
 }
