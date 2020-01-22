@@ -16,6 +16,8 @@ namespace VoidCommand.Systems
             
             return Entities.ForEach((ref Rotation rotation, in MovementOrder movementOrder, in MovementCapabilities movementCapabilities) =>
             {
+                if (math.length(movementOrder.Heading) == 0) return;
+
                 var fwd = math.forward(rotation.Value);
                 var angle = PhysicsUtils.AngleSigned(fwd, movementOrder.Heading);
 

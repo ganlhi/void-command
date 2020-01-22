@@ -1,4 +1,6 @@
+using System;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace VoidCommand.Shared
 {
@@ -7,6 +9,16 @@ namespace VoidCommand.Shared
         public float3 Position;
         public float3 Velocity;
         public float3 Acceleration;
+    }
+    
+    [Serializable]
+    public struct InterceptData
+    {
+        public float3 Acceleration;
+        public float TimeToIntercept;
+        public float ClosestDistance;
+        public float3 SubjectPos;
+        public float3 TargetPos;
     }
     
     public static class PhysicsUtils
@@ -26,40 +38,55 @@ namespace VoidCommand.Shared
             };
         }
 
-        public static float ClosestApproach(PhysicalState subject, PhysicalState target, float timeIncrement = 1f)
+        public static float2 ClosestApproach(PhysicalState subject, PhysicalState target, float timeIncrement = 1f, int maxSteps = 3600)
         {
-            var closestDistance = float.MaxValue;
-                
-            while (true)
+            var closestDistance = math.distance(subject.Position, target.Position);
+            var closestDistanceTime = 0f;
+            var totalTime = 0f;
+            var steps = 0;
+            
+            while (steps < maxSteps && closestDistance > float.Epsilon)
             {
+                steps += 1;
+                
+                subject = PredictFutureState(subject, timeIncrement);
+                target = PredictFutureState(target, timeIncrement);
+                totalTime += timeIncrement;
+                
                 var dist = math.distance(subject.Position, target.Position);
 
-                if (dist >= closestDistance)
+                if (dist < closestDistance)
                 {
-                    // done, we will not get any closer
-                    return closestDistance;
-                }
-                else
-                {
-                    subject = PredictFutureState(subject, timeIncrement);
-                    target = PredictFutureState(target, timeIncrement);
                     closestDistance = dist;
+                    closestDistanceTime = totalTime;
                 }
             }
+            
+            return new float2(closestDistance, closestDistanceTime);
         }
 
-        public static float3 AccelerationToIntercept(PhysicalState subject, PhysicalState target, float accMag, float leadTimeIncrement = 1f)
+        public static InterceptData AccelerationToIntercept(PhysicalState subject, PhysicalState target, float accMag, float leadTimeIncrement = 1f, int maxSteps = 3600)
         {
             var leadTime = 0f;
-            var accToIntercept = float3.zero;
-            var closestDistance = float.MaxValue;
+            var steps = 0;
 
-            while (true)
+            var intercept = new InterceptData
             {
+                Acceleration = float3.zero,
+                ClosestDistance = math.distance(subject.Position, target.Position),
+                TimeToIntercept = 0,
+                SubjectPos = subject.Position,
+                TargetPos = target.Position
+            };
+            
+            while (steps < maxSteps && intercept.ClosestDistance > float.Epsilon)
+            {
+                steps += 1;
+                
                 var targetPoint = PredictFutureState(target, leadTime).Position;
-                var acc = math.normalize(subject.Position - targetPoint) * accMag;
+                var acc = math.normalize(targetPoint - subject.Position) * accMag;
 
-                var cd = ClosestApproach(
+                var ca = ClosestApproach(
                     new PhysicalState()
                     {
                         Position = subject.Position,
@@ -69,18 +96,30 @@ namespace VoidCommand.Shared
                     target
                 );
 
-                if (cd >= closestDistance)
+                var cd = ca.x;
+                var tti = ca.y;
+
+                if (cd < intercept.ClosestDistance)
                 {
-                    // done, we will not get any closer
-                    return accToIntercept;
+                    intercept = new InterceptData
+                    {
+                        Acceleration = acc,
+                        ClosestDistance = cd,
+                        TimeToIntercept = tti,
+                        SubjectPos = PredictFutureState(new PhysicalState()
+                        {
+                            Position = subject.Position,
+                            Velocity = subject.Velocity,
+                            Acceleration = acc
+                        }, tti).Position,
+                        TargetPos = PredictFutureState(target, tti).Position
+                    };
                 }
-                else
-                {
-                    accToIntercept = acc;
-                    closestDistance = cd;
-                    leadTime += leadTimeIncrement;
-                }
+                
+                leadTime += leadTimeIncrement;
             }
+
+            return intercept;
         }
         
         /// <summary>Returns the angle in degrees from 0 to 180 between two float3s.</summary>
